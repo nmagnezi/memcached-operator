@@ -42,8 +42,11 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("memcached-controller", mgr, controller.Options{Reconciler: r})
+	// Create a new controller/
+	c, err := controller.New("memcached-controller", mgr, controller.Options{
+		MaxConcurrentReconciles: 2,
+		Reconciler: r
+	})
 	if err != nil {
 		return err
 	}
@@ -89,6 +92,23 @@ type ReconcileMemcached struct {
 func (r *ReconcileMemcached) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Memcached")
+
+	// Fetch the Memcached instance
+	memcached := &cachev1alpha1.Memcached{}
+	err := r.client.Get(context.TODO(), request.NamespacedName, memcached)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			reqLogger.Info("Memecached resource not found. Ignoring since must be deleted")
+			return reconcile.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		reqLogger.Error(err, "Failed to get Memcached.")
+		return reconcile.Result{}, err
+	}
+
 
 	// Fetch the Memcached instance
 	memcached := &cachev1alpha1.Memcached{}
